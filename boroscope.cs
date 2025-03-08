@@ -17,8 +17,8 @@ public class FrameCaptureSystem
     /// </summary>
     public async Task StartRecording()
     {
-        Console.WriteLine("[green]Frame Capture System[/][underline] started.[/]");
-        Console.WriteLine("-------------------------------");
+        AnsiConsole.MarkupLine("[green]Frame Capture System[/][underline] started.[/]");
+        AnsiConsole.MarkupLine("-------------------------------");
 
         try
         {
@@ -28,21 +28,21 @@ public class FrameCaptureSystem
 
             while (true)
             {
-                Console.WriteLine("-------------------------------");
-                Console.WriteLine("[green]Waiting for incoming frames[/][blue]...");
-                Console.WriteLine("-------------------------------");
+                AnsiConsole.MarkupLine("-------------------------------");
+                AnsiConsole.MarkupLine("[green]Waiting for incoming frames[/][blue]...");
+                AnsiConsole.MarkupLine("-------------------------------");
 
                 // Receive frames from remote source and process them
                 await ProcessReceivedFrames();
 
-                Console.WriteLine("[green]Processing complete.[/]");
-                Console.WriteLine("-------------------------------");
+                AnsiConsole.MarkupLine("[green]Processing complete.[/]");
+                AnsiConsole.MarkupLine("-------------------------------");
             }
         }
         catch (Exception ex)
         {
             AnsiConsole.WriteException(ex);
-            Environment.Exit(-1); // Exit the application with an error code
+            throw; // throws if it cannot start capturing frames...
         }
     }
 
