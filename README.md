@@ -66,7 +66,6 @@ try
 catch (Exception ex)
 {
 	AnsiConsole.WriteException(ex);
+	Environment.Exit(-1);
 }
 ```
-
-Note: This is just a basic example of how to use the library. You should consult the documentation for more information on available methods and parameters.
