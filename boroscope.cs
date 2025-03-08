@@ -17,7 +17,7 @@ public class FrameCaptureSystem
     /// </summary>
     public async Task StartRecording()
     {
-        AnsiConsole.MarkupLine("[green]Frame Capture System[/][underline] started.[/]");
+        AnsiConsole.MarkupLine("[green]Frame Capture System[/][green underline] started.[/]");
         AnsiConsole.MarkupLine("-------------------------------");
 
         try
@@ -29,7 +29,7 @@ public class FrameCaptureSystem
             while (true)
             {
                 AnsiConsole.MarkupLine("-------------------------------");
-                AnsiConsole.MarkupLine("[green]Waiting for incoming frames[/][blue]...");
+                AnsiConsole.MarkupLine("[green]Waiting for incoming frames[/][green blink]...");
                 AnsiConsole.MarkupLine("-------------------------------");
 
                 // Receive frames from remote source and process them
@@ -59,7 +59,7 @@ public class FrameCaptureSystem
             await client.Connect(RemoteIpAddress, 8030);
             _udpClient = client; // Store the connected client
 
-            AnsiConsole.MarkupLine($"[green]Connected[/][underline] to [/][blue]{RemoteIpAddress}[/]:8030.");
+            AnsiConsole.MarkupLine($"[green]Connected[/][green dim] to [/][white bold]{RemoteIpAddress}[/]:8030.");
             AnsiConsole.MarkupLine("-------------------------------");
 
             AnsiConsole.MarkupLine("[yellow]Waiting for incoming frames[/]");
@@ -80,32 +80,34 @@ public class FrameCaptureSystem
             // Receive a frame from the remote source
             byte[] dgram = _udpClient.Receive(ref RemoteSourceAddress);
 
-            AnsiConsole.MarkupLine($"[green]Received[/][blue] [/][green underline]packet from[/][green] [/][green]{RemoteIpAddress[/] [green bold]boroscope[/].");
+            AnsiConsole.MarkupLine($"[green]Received[/][blue] [/][green underline]packet from[/][green] [/][green]{RemoteIpAddress}[/] [green bold]boroscope[/].");
             AnsiConsole.WriteLine("-------------------------------");
 
             // Extract header, body, and order information
             var header = dgram.Take(51).ToArray();
             var body = dgram.Skip(51).ToArray();
-
+            
+            // maybe cut from FF D8 towards FF D9? Broken frames from JFIF (JPEGs) are also born there...
+            // maybe libavcodec?
             if (body.Contains(new byte[] { 0xFF, 0xD9 }))
             {
-                AnsiConsole.MarkupLine("[yellow]End of stream[/] [yellow dim]0xFF 0xD9[/]");
+                AnsiConsole.MarkupLine("[purple bold underline]End of JPEG frame[/] ([yellow dim]0xFF 0xD9[/])");
                 await SaveCapturedFrame(body);
             }
             else
             {
                 AddFrameToMemory(header, body);
 
-                AnsiConsole.MarkupLine("[green]Frame added[/][blue] to [/][yellow]{0:X8}[/].");
+                AnsiConsole.MarkupLine("[green]Frame added[/][green dim] to [/][yellow]{0:X8}[/].");
             }
 
-            AnsiConsole.MarkupLine("[green]Processing complete.[/]");
+            AnsiConsole.MarkupLine($"[green]Processing [/][italic green]{header.Length + body.Length} bytes[/][green] complete.[/]");
         }
         catch (Exception ex)
         {
             AnsiConsole.WriteException(ex);
             AnsiConsole.MarkupLine("[red]Error occurred while processing frame:[/]");
-            AnsiConsole.MarkupLine("[blue]Frame details: [/][yellow]header[/][green]/{0:X8}[/][red][br]", header[12], body.Length);
+            AnsiConsole.MarkupLine("[blue]Frame details: [/][yellow]header[/][green]/{0:X8}[/]", header[12], body.Length);
         }
     }
 
@@ -118,7 +120,7 @@ public class FrameCaptureSystem
         {
             var fileStream = new FileStream($"./output/{_frameIndex}.jpg", FileMode.Create, FileAccess.Write);
             await fileStream.WriteAsync(data, 0, data.Length);
-            AnsiConsole.MarkupLine("[green]Frame saved[/][blue] as [/][yellow]{0:X8}.jpg[/].[br]", _frameIndex);
+            AnsiConsole.MarkupLine("[green]Frame saved[/][green dim] as [/][yellow]{0:X8}.jpg[/].", _frameIndex);
         }
         catch (Exception ex)
         {
