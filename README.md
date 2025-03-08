@@ -2,6 +2,8 @@
 
 This code is available for **archiving purposes** only.
 
+[Boroscope File](https://github.com/iamdroppy/boroscope/blob/main/boroscope.cs)
+
 # Communications API of Boroscope
 
 ## How it works
@@ -43,9 +45,9 @@ The order of the frame is header offset 0x21, and tag is in offset 12 (dec)
 
 Frame starts at 0x1D then the length is a 16 bit (short) of offset 12 and 13 (dec)
 
-Line 96 checks if the len of the dgram is different than the received length, if so, discards frame
+[Line 93](https://github.com/iamdroppy/boroscope/blob/main/boroscope.cs:96) checks if the len of the dgram is different than the received length, if so, discards frame
 
-On line 104 checks if it contains a pattern of END OF JPEG (as it sends in **JFIF**) : `FF D9`
+On [Line 104](https://github.com/iamdroppy/boroscope/blob/main/boroscope.cs:104) checks if it contains a pattern of END OF JPEG (as it sends in **JFIF**) : `FF D9`
 
 Then it tries to reassemble the image and store it in a view.
 
