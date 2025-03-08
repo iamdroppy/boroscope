@@ -1,196 +1,151 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Drawing;
-using System.IO;
-using System.Linq;
-using System.Net;
-using System.Net.Sockets;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows.Forms;
+using Spectre.Console;
 
-namespace FrameTest
+public class FrameCaptureSystem
 {
-    public partial class Form1 : Form
+    /// <summary>
+    /// The main frame capture system class.
+    /// </summary>
+    private UdpClient _udpClient;
+    private Dictionary<byte, SortedDictionary<byte, byte[]>> _frameOrder; // Stores captured frames in memory
+    private int _frameIndex = 0; // Track the current frame index
+    private static const string RemoteIpAddress = "192.168.10.123";
+
+    /// <summary>
+    /// Starts the frame capture process.
+    /// </summary>
+    public async Task StartRecording()
     {
-        public Form1()
-        {
-            InitializeComponent();
-        }
+        Console.WriteLine("[green]Frame Capture System[/][underline] started.[/]");
+        Console.WriteLine("-------------------------------");
 
-        private void Form1_Load(object sender, EventArgs e)
+        try
         {
-            FormClosed += Form1_FormClosed;
-            _listener = new TcpListener(IPAddress.Any, 10020);
-            _listener.Start();
-        }
+            // Establish connection with remote source using UDP
+            _udpClient = new UdpClient();
+            await ConnectToRemoteSource();
 
-        private void Form1_FormClosed(object sender, FormClosedEventArgs e)
-        {
-            if (_client != null)
+            while (true)
             {
-                SendDgram(_client, new byte[] { 0x99, 0x99, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 });
+                Console.WriteLine("-------------------------------");
+                Console.WriteLine("[green]Waiting for incoming frames[/][blue]...");
+                Console.WriteLine("-------------------------------");
+
+                // Receive frames from remote source and process them
+                await ProcessReceivedFrames();
+
+                Console.WriteLine("[green]Processing complete.[/]");
+                Console.WriteLine("-------------------------------");
             }
         }
-
-        UdpClient _client;
-        TcpListener _listener;
-
-        public async Task StartRecording()
+        catch (Exception ex)
         {
-            await Task.Yield();
-
-            await Task.Run(async () =>
-            {
-                //Socket socket = _listener.AcceptSocket();
-                MessageBox.Show("Accepted socket");
-                IPEndPoint remote = new IPEndPoint(IPAddress.Parse("192.168.10.123"), 8030);
-                _client = new UdpClient();
-                _client.Client.ReceiveTimeout = 1000;
-                _client.Client.SendTimeout = 3000;
-                _client.Connect(remote);
-
-                //starts new connection
-
-                ulong i = 0;
-
-                Dictionary<byte, SortedDictionary<byte, byte[]>> frameOrder = new Dictionary<byte, SortedDictionary<byte, byte[]>>();
-                
-                bool receiving = false;
-                while (true)
-                {
-                    byte[] dgram;
-
-                    try
-                    {
-                        if (!receiving)
-                            SendDgram(_client, new byte[] { 0x99, 0x99, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 });
-
-                        dgram = _client.Receive(ref remote);
-                    }
-                    catch
-                    {
-                        continue;
-                    }
-                    receiving = true;
-
-
-
-                    bool discardFrame = false;
-
-                    if (dgram.Length > 0)
-                    {
-                        byte[] header = dgram.Take(51).ToArray();
-                        byte[] body = dgram.Skip(51).ToArray();
-
-                        byte order = header[0x21];
-                        byte tag = header[12];
-
-                        byte frame = header[0x1D];
-
-                        short len = BitConverter.ToInt16(new byte[] { header[12], header[13] }, 0);
-
-                        if (len != dgram.Length)
-                            discardFrame = true;
-
-                        if (!frameOrder.ContainsKey(frame))
-                            frameOrder.Add(frame, new SortedDictionary<byte, byte[]>());
-
-                        var frameData = frameOrder[frame];
-
-                        if (ContainsPattern(body, new byte[] { 0xFF, 0xD9 }, out int position))
-                        {
-                            // ends stream
-
-
-                            List<byte> bS = new List<byte>();
-                            int packetId = 0;
-                            foreach (byte[] b in frameData.Select(s => s.Value))
-                            {
-                                bS.AddRange(b);
-                                packetId++;
-                            }
-
-                            bS.AddRange(body);
-
-                            pictureBox1.Invoke((MethodInvoker)delegate
-                            {
-                                try { pictureBox1.Image = new Bitmap(new MemoryStream(bS.ToArray())); }
-                                catch { }
-                            });
-                            //socket.Send(bS.ToArray());
-
-                            //File.WriteAllBytes($"f{frame}.jpg", bS.ToArray());
-
-                            frameOrder.Remove(frame);
-
-                        }
-                        else
-                        {
-                            if (frameData.ContainsKey(order))
-                                frameData[order] = body;
-                            else
-                                frameData.Add(order, body);
-
-                            Console.WriteLine(order);
-                        }
-
-                        i++;
-                    }
-                }
-
-                // tries to stop current connection
-                SendDgram(_client, new byte[] { 0x99, 0x99, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 });
-            });
+            AnsiConsole.WriteException(ex);
+            Environment.Exit(-1); // Exit the application with an error code
         }
+    }
 
-        public async Task SetImage()
+    /// <summary>
+    /// Connects to the remote source.
+    /// </summary>
+    private async Task ConnectToRemoteSource()
+    {
+        var client = new UdpClient();
+
+        try
         {
-            //await Task.Yield();
-            //await Task.Run(async () =>
-            //{
-            //    while (true)
-            //    {
-            //        try
-            //        {
-            //            if (_images.TryDequeue(out byte[] result))
-            //            {
-                            
-            //            }
-            //        }
-            //        catch { }
-            //    }
-            //});
+            // Attempt to connect to the remote source
+            await client.Connect(RemoteIpAddress, 8030);
+            _udpClient = client; // Store the connected client
+
+            AnsiConsole.MarkupLine($"[green]Connected[/][underline] to [/][blue]{RemoteIpAddress}[/]:8030.");
+            AnsiConsole.MarkupLine("-------------------------------");
+
+            AnsiConsole.MarkupLine("[yellow]Waiting for incoming frames[/]");
         }
-
-        public static bool ContainsPattern(byte[] source, byte[] pattern, out int position, int startIndex = 0)
+        catch (Exception ex)
         {
-            position = 0;
-            for (int i = startIndex; i < source.Length; i++)
+            AnsiConsole.WriteException(ex);
+        }
+    }
+
+    /// <summary>
+    /// Processes received frames from the remote source.
+    /// </summary>
+    private async Task ProcessReceivedFrames()
+    {
+        try
+        {
+            // Receive a frame from the remote source
+            byte[] dgram = _udpClient.Receive(ref RemoteSourceAddress);
+
+            AnsiConsole.MarkupLine($"[green]Received[/][blue] [/][green underline]packet from[/][green] [/][green]{RemoteIpAddress[/] [green bold]boroscope[/].");
+            AnsiConsole.WriteLine("-------------------------------");
+
+            // Extract header, body, and order information
+            var header = dgram.Take(51).ToArray();
+            var body = dgram.Skip(51).ToArray();
+
+            if (body.Contains(new byte[] { 0xFF, 0xD9 }))
             {
-                if (source.Skip(i).Take(pattern.Length).SequenceEqual(pattern))
-                {
-                    position = i;
-                    return true;
-                }
+                AnsiConsole.MarkupLine("[yellow]End of stream[/] [yellow dim]0xFF 0xD9[/]");
+                await SaveCapturedFrame(body);
+            }
+            else
+            {
+                AddFrameToMemory(header, body);
+
+                AnsiConsole.MarkupLine("[green]Frame added[/][blue] to [/][yellow]{0:X8}[/].");
             }
 
-            return false;
+            AnsiConsole.MarkupLine("[green]Processing complete.[/]");
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.WriteException(ex);
+            AnsiConsole.MarkupLine("[red]Error occurred while processing frame:[/]");
+            AnsiConsole.MarkupLine("[blue]Frame details: [/][yellow]header[/][green]/{0:X8}[/][red][br]", header[12], body.Length);
+        }
+    }
+
+    /// <summary>
+    /// Saves the captured frame to a file.
+    /// </summary>
+    private async Task SaveCapturedFrame(byte[] data)
+    {
+        try
+        {
+            var fileStream = new FileStream($"./output/{_frameIndex}.jpg", FileMode.Create, FileAccess.Write);
+            await fileStream.WriteAsync(data, 0, data.Length);
+            AnsiConsole.MarkupLine("[green]Frame saved[/][blue] as [/][yellow]{0:X8}.jpg[/].[br]", _frameIndex);
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.WriteException(ex);
         }
 
-        static void SendDgram(UdpClient client, byte[] dgram)
+        _frameIndex++;
+    }
+
+    /// <summary>
+    /// Adds a frame to the memory.
+    /// </summary>
+    private void AddFrameToMemory(byte[] header, byte[] body)
+    {
+        var sortedDictionary = new SortedDictionary<byte, byte[]>(body.Length); // Create a new sorted dictionary
+
+        if (!sortedDictionary.ContainsKey(header[12]))
         {
-            client.Send(dgram, dgram.Length);
+            sortedDictionary.Add(header[12], body);
+        }
+        else
+        {
+            sortedDictionary[header[12]] += body;
         }
 
-        private async void button1_Click(object sender, EventArgs e)
-        {
-            button1.Enabled = false;
-            StartRecording();
-            SetImage();
-        }
+        _frameOrder.TryAdd(header[0], sortedDictionary); // Add to the main frame order dictionary
+
+        AnsiConsole.MarkupLine("[green]Frame added[/][blue] to [/][yellow]{0:X8}[/].");
     }
 }
