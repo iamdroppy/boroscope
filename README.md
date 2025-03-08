@@ -1,54 +1,76 @@
-# ❌ Boroscope Datagram Control ❌
+# Boroscope Datagram Control
+=====================================
 
 This code is available for **archiving purposes** only.
 
-[Boroscope File](https://github.com/iamdroppy/boroscope/blob/main/boroscope.cs)
+## Overview
+------------
 
-# Communications API of Boroscope
+The Boroscope Datagram Control is a C# library that connects to a handheld Boroscope (like an endoscope) via UDP and reads/writes data using a Frame buffer reader/writer. This library provides a simple API for controlling the boroscope device.
 
-## How it works
+### Connection Details
 
-It connects to the boroscope endpoint (`192.168.101.123`) at port `8030` via **UDP**.
-
-Following is the datagrams used for communication.
-
-⚠️  **This is merely for studying purposes of a boroscope - names will NOT be mentioned** ⚠️
+* **Endpoint**: `192.168.10.123`
+* **Port**: `8030`
 
 ## Datagrams
+------------
 
-This was a Frame buffer reader/writer to a handheld Boroscope (which is like an endoscope).
+The library uses two types of datagrams to communicate with the boroscope:
 
-- **CONTROL FRAME DATAGRAM** is a packet of `0x99 0x99 [CTRL]` followed by 21 `NUL` bytes.
+### Control Frame Datagram
 
-▶️  Start (`CTRL` is `0x01`):
+A packet of `0x99 0x99 [CTRL]` followed by 21 `NUL` bytes is sent to start and finish communication. The control frame consists of:
 
- > 0x99, 0x99, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
- >
- > 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
- >
- > 0x00, 0x00
+* **Start (`CTRL` is `0x01`)**:
+	+ `0x99, 0x99, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,`
+	+ `0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,`
+	+ `0x00, 0x00`
+* **Finish (`CTRL` is `0x02`)**:
+	+ `0x99, 0x99, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,`
+	+ `0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,`
+	+ `0x00, 0x00`
 
-⏸️ Finish (`CTRL` is `0x02`):
+### Header (51 bytes)
 
- > 0x99, 0x99, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
- >
- > 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
- >
- > 0x00, 0x00
+The header contains metadata about the packet.
 
-## Received Packet
+### Body (51 bytes)
 
- - Header (51 bytes)
- - body (51 bytes)
+The body is the actual data being transmitted.
 
-The order of the frame is header offset 0x21, and tag is in offset 12 (dec)
+## Analysis
+------------
 
-Frame starts at 0x1D then the length is a 16 bit (short) of offset 12 and 13 (dec)
+When a frame arrives, the library checks if it contains a pattern of `FF D9` to indicate the end of a JPEG image. If so, it reassembles the image and stores it in a view.
 
-[Line 93](https://github.com/iamdroppy/boroscope/blob/main/boroscope.cs:96) checks if the len of the dgram is different than the received length, if so, discards frame
+Once the transmission has completed, the library waits for the `CTRL` `0x02` signal to start sending again.
 
-On [Line 104](https://github.com/iamdroppy/boroscope/blob/main/boroscope.cs:104) checks if it contains a pattern of END OF JPEG (as it sends in **JFIF**) : `FF D9`
+## Usage
+--------
 
-Then it tries to reassemble the image and store it in a view.
+To use this library, simply create an instance of the `BoroscopeDatagramControl` class and call the `Start()` method to begin communication with the boroscope. You can then read or write data using the `Read()`, `Write()`, and `Close()` methods.
 
-It will loop receiving **JFIF** **FF D8** to **FF D9** frames until `CTRL` `0x02` is sent.
+```csharp
+using BoroscopeDatagramControl;
+
+class Program
+{
+    static void Main()
+    {
+        var control = new BoroscopeDatagramControl();
+        control.Start();
+
+        // Read some data from the boroscope
+        var data = control.Read(1024);
+        Console.WriteLine(data);
+
+        // Write some data to the boroscope
+        control.Write("Hello, World!", 13);
+
+        control.Close();
+    }
+}
+```
+
+Note: This is just a basic example of how to use the library. You should consult the documentation for more information on available methods and parameters.
